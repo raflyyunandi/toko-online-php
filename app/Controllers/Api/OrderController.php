@@ -38,7 +38,17 @@ final class OrderController
     public function store(Request $request): Response
     {
         try {
-            $result = $this->orderService->createOrder($request->json);
+            $flashSale = false;
+            if (isset($request->headers['x-flash-sale'])) {
+                $v = strtolower(trim((string) $request->headers['x-flash-sale']));
+                $flashSale = in_array($v, ['1', 'true', 'on', 'yes'], true);
+            }
+            if (!$flashSale && isset($request->query['flash_sale'])) {
+                $v = strtolower(trim((string) $request->query['flash_sale']));
+                $flashSale = in_array($v, ['1', 'true', 'on', 'yes'], true);
+            }
+
+            $result = $this->orderService->createOrder($request->json, $flashSale);
             return Response::json(['data' => $result], 201);
         } catch (ValidationException $e) {
             return Response::json([

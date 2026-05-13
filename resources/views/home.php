@@ -19,6 +19,9 @@
             <div class="grid">
                 <div class="card">
                     <h2>Buat Order</h2>
+                    <div class="badge-row">
+                        <span class="badge" id="flashSaleBadge">Flash Sale: OFF</span>
+                    </div>
                     <form id="orderForm">
                         <label>Customer</label>
                         <input name="customer_name" placeholder="Nama customer (opsional)">
@@ -50,6 +53,30 @@
                 <button id="refreshProducts" type="button">Refresh</button>
                 <pre id="productsList" class="result"></pre>
             </div>
+
+            <div class="card">
+                <h2>Demo Multi-Tab Checkout</h2>
+                <form id="multiTabSetupForm">
+                    <label>Nama untuk tab ini</label>
+                    <input name="customer_name" placeholder="Contoh: user-tab-1" required>
+                    <button type="submit">Simpan Nama Tab</button>
+                </form>
+
+                <form id="multiTabTriggerForm">
+                    <label>Product ID (untuk semua tab)</label>
+                    <input name="product_id" type="number" min="1" required>
+
+                    <label>Quantity (untuk semua tab)</label>
+                    <input name="quantity" type="number" min="1" value="1" required>
+
+                    <button type="submit">Trigger Checkout (semua tab)</button>
+                </form>
+
+                <label>Tab yang terdaftar</label>
+                <pre id="multiTabPeers" class="result"></pre>
+
+                <pre id="multiTabResult" class="result"></pre>
+            </div>
         </div>
 
         <div id="adminTab" class="tab-content">
@@ -65,6 +92,12 @@
                         <button type="submit">Simpan</button>
                     </form>
                     <pre id="adminKeyResult" class="result"></pre>
+                </div>
+
+                <div class="card">
+                    <h2>Flash Sale</h2>
+                    <button id="toggleFlashSale" type="button">Aktifkan</button>
+                    <pre id="flashSaleResult" class="result"></pre>
                 </div>
 
                 <div class="card">

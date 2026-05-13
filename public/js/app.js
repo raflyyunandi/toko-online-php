@@ -41,6 +41,25 @@ function saveAdminKey(value) {
     }
 }
 
+function loadFlashSale() {
+    try {
+        return localStorage.getItem('flash_sale') || '0';
+    } catch {
+        return '0';
+    }
+}
+
+function saveFlashSale(value) {
+    try {
+        localStorage.setItem('flash_sale', value ? '1' : '0');
+    } catch {
+    }
+}
+
+function isFlashSaleActive() {
+    return loadFlashSale() === '1';
+}
+
 function maskKey(key) {
     const v = (key || '').trim();
     if (!v) {
@@ -55,6 +74,31 @@ function maskKey(key) {
 function adminHeaders() {
     const key = loadAdminKey().trim();
     return key ? { 'X-Admin-Key': key } : {};
+}
+
+function orderHeaders() {
+    return isFlashSaleActive() ? { 'X-Flash-Sale': '1' } : {};
+}
+
+function updateFlashSaleUi() {
+    const active = isFlashSaleActive();
+
+    const badge = document.getElementById('flashSaleBadge');
+    if (badge) {
+        badge.textContent = active ? 'Flash Sale: ON' : 'Flash Sale: OFF';
+    }
+
+    const btn = document.getElementById('toggleFlashSale');
+    if (btn) {
+        btn.textContent = active ? 'Nonaktifkan' : 'Aktifkan';
+    }
+
+    const out = document.getElementById('flashSaleResult');
+    if (out) {
+        out.textContent = active
+            ? 'Mode flash sale aktif. Order akan memakai locking di server.'
+            : 'Mode flash sale nonaktif.';
+    }
 }
 
 function setTab(name) {
@@ -109,6 +153,12 @@ document.getElementById('toggleAdminKey')?.addEventListener('click', () => {
     }
 });
 
+document.getElementById('toggleFlashSale')?.addEventListener('click', () => {
+    const active = isFlashSaleActive();
+    saveFlashSale(!active);
+    updateFlashSaleUi();
+});
+
 document.getElementById('productForm')?.addEventListener('submit', async (e) => {
     e.preventDefault();
     const form = e.currentTarget;
@@ -124,7 +174,8 @@ document.getElementById('productForm')?.addEventListener('submit', async (e) => 
         body: JSON.stringify(payload)
     });
     out.textContent = `HTTP ${status}\n` + pretty(json);
-    await refreshProducts();
+    await refreshProducts('productsList');
+    await refreshProducts('productsListAdmin');
 });
 
 document.getElementById('setStockForm')?.addEventListener('submit', async (e) => {
@@ -149,7 +200,8 @@ document.getElementById('setStockForm')?.addEventListener('submit', async (e) =>
         body: JSON.stringify({ stock })
     });
     out.textContent = `HTTP ${status}\n` + pretty(json);
-    await refreshProducts();
+    await refreshProducts('productsList');
+    await refreshProducts('productsListAdmin');
 });
 
 document.getElementById('allOrdersForm')?.addEventListener('submit', async (e) => {
@@ -205,9 +257,14 @@ document.getElementById('orderForm')?.addEventListener('submit', async (e) => {
         ]
     };
     const out = document.getElementById('orderResult');
-    const { status, json } = await api('/api/orders', { method: 'POST', body: JSON.stringify(payload) });
+    const { status, json } = await api('/api/orders', {
+        method: 'POST',
+        headers: orderHeaders(),
+        body: JSON.stringify(payload)
+    });
     out.textContent = `HTTP ${status}\n` + pretty(json);
-    await refreshProducts();
+    await refreshProducts('productsList');
+    await refreshProducts('productsListAdmin');
 });
 
 document.getElementById('myOrdersForm')?.addEventListener('submit', async (e) => {
@@ -223,6 +280,350 @@ document.getElementById('myOrdersForm')?.addEventListener('submit', async (e) =>
     out.textContent = `HTTP ${status}\n` + pretty(json);
 });
 
+function loadTabCustomerName() {
+    try {
+        return sessionStorage.getItem('tab_customer_name') || '';
+    } catch {
+        return '';
+    }
+}
+
+function saveTabCustomerName(value) {
+    try {
+        sessionStorage.setItem('tab_customer_name', value);
+    } catch {
+    }
+}
+
+function loadTabId() {
+    try {
+        let v = sessionStorage.getItem('tab_id') || '';
+        if (!v) {
+            v = String(Date.now()) + '-' + String(Math.random()).slice(2);
+            sessionStorage.setItem('tab_id', v);
+        }
+        return v;
+    } catch {
+        return 'tab-' + String(Date.now()) + '-' + String(Math.random()).slice(2);
+    }
+}
+
+const PEER_PREFIX = 'toko_online_peer:';
+const CLAIM_PREFIX = 'toko_online_claim:';
+const RUNTIME_TOKEN = String(Date.now()) + '-' + String(Math.random()).slice(2);
+const ACTIVE_TTL_MS = 15000;
+
+function generateTabId() {
+    return String(Date.now()) + '-' + String(Math.random()).slice(2);
+}
+
+function ensureUniqueTabId() {
+    for (let i = 0; i < 5; i++) {
+        let id = '';
+        try {
+            id = sessionStorage.getItem('tab_id') || '';
+        } catch {
+            id = '';
+        }
+
+        if (!id) {
+            id = generateTabId();
+            try {
+                sessionStorage.setItem('tab_id', id);
+            } catch {
+            }
+        }
+
+        const claimKey = CLAIM_PREFIX + id;
+        const now = Date.now();
+        let existing = null;
+        try {
+            const raw = localStorage.getItem(claimKey) || '';
+            existing = raw ? JSON.parse(raw) : null;
+        } catch {
+            existing = null;
+        }
+
+        const existingToken = existing && existing.token ? String(existing.token) : '';
+        const existingSeen = existing && existing.last_seen ? Number(existing.last_seen) : 0;
+        const isClaimedByOther = existingToken && existingToken !== RUNTIME_TOKEN && (now - existingSeen) <= ACTIVE_TTL_MS;
+
+        if (isClaimedByOther) {
+            const newId = generateTabId();
+            try {
+                sessionStorage.setItem('tab_id', newId);
+            } catch {
+            }
+            continue;
+        }
+
+        try {
+            localStorage.setItem(claimKey, JSON.stringify({ token: RUNTIME_TOKEN, last_seen: now }));
+        } catch {
+        }
+
+        return id;
+    }
+
+    return generateTabId();
+}
+
+function upsertPeer(id, name, lastSeen) {
+    const peerId = String(id || '').trim();
+    const peerName = String(name || '').trim();
+    if (!peerId || !peerName) {
+        return;
+    }
+    const payload = { id: peerId, name: peerName, last_seen: Number(lastSeen || Date.now()) };
+    try {
+        localStorage.setItem(PEER_PREFIX + peerId, JSON.stringify(payload));
+    } catch {
+    }
+
+    try {
+        localStorage.setItem(CLAIM_PREFIX + peerId, JSON.stringify({ token: RUNTIME_TOKEN, last_seen: payload.last_seen }));
+    } catch {
+    }
+}
+
+function readClaim(id) {
+    try {
+        const raw = localStorage.getItem(CLAIM_PREFIX + String(id)) || '';
+        return raw ? JSON.parse(raw) : null;
+    } catch {
+        return null;
+    }
+}
+
+function listPeers() {
+    const now = Date.now();
+    const peers = [];
+    try {
+        for (let i = 0; i < localStorage.length; i++) {
+            const key = localStorage.key(i);
+            if (!key || key.indexOf(PEER_PREFIX) !== 0) {
+                continue;
+            }
+            const raw = localStorage.getItem(key) || '';
+            const p = raw ? JSON.parse(raw) : null;
+            if (!p || !p.id || !p.name) {
+                continue;
+            }
+            const ts = Number(p.last_seen || 0);
+            const claim = readClaim(p.id);
+            const claimSeen = claim && claim.last_seen ? Number(claim.last_seen) : 0;
+
+            if ((now - ts) > ACTIVE_TTL_MS || (now - claimSeen) > ACTIVE_TTL_MS) {
+                try {
+                    localStorage.removeItem(key);
+                } catch {
+                }
+                continue;
+            }
+            peers.push({ id: String(p.id), name: String(p.name), last_seen: ts });
+        }
+    } catch {
+    }
+    return peers;
+}
+
+function renderPeers() {
+    const out = document.getElementById('multiTabPeers');
+    if (!out) {
+        return;
+    }
+    const myId = ensureUniqueTabId();
+    const rows = listPeers().filter((p) => p && p.name && p.id !== myId);
+
+    const byName = {};
+    rows.forEach((p) => {
+        const name = String(p.name);
+        const prev = byName[name];
+        if (!prev || Number(p.last_seen) > Number(prev.last_seen)) {
+            byName[name] = p;
+        }
+    });
+
+    const uniqueRows = Object.keys(byName)
+        .map((k) => byName[k])
+        .sort((a, b) => String(a.name).localeCompare(String(b.name)));
+
+    if (uniqueRows.length === 0) {
+        out.textContent = 'Belum ada tab lain yang terdaftar.';
+        return;
+    }
+
+    out.textContent = uniqueRows.map((p) => `- ${p.name}`).join('\n');
+}
+
+function announceTab() {
+    const tabId = ensureUniqueTabId();
+    const name = loadTabCustomerName().trim();
+    if (!name) {
+        renderPeers();
+        return;
+    }
+
+    upsertPeer(tabId, name, Date.now());
+    renderPeers();
+
+    const msg = { type: 'register_tab', payload: { id: tabId, name, last_seen: Date.now() } };
+    if (multiTabChannel) {
+        try {
+            multiTabChannel.postMessage(msg);
+        } catch {
+        }
+    }
+
+    try {
+        localStorage.setItem('multi_tab_register', JSON.stringify(msg));
+        localStorage.setItem('multi_tab_register_trigger', String(Date.now()) + '-' + String(Math.random()));
+    } catch {
+    }
+}
+
+async function multiTabCheckout(payload) {
+    const out = document.getElementById('multiTabResult');
+    const tabName = loadTabCustomerName().trim();
+
+    if (!out) {
+        return;
+    }
+    if (!tabName) {
+        out.textContent = 'Nama tab belum diset. Isi lalu klik "Simpan Nama Tab".';
+        return;
+    }
+    if (!payload || !payload.product_id || !payload.quantity) {
+        out.textContent = 'Payload tidak valid.';
+        return;
+    }
+
+    const orderPayload = {
+        customer_name: tabName,
+        items: [
+            { product_id: Number(payload.product_id), quantity: Number(payload.quantity) }
+        ]
+    };
+
+    const { status, json } = await api('/api/orders', {
+        method: 'POST',
+        headers: orderHeaders(),
+        body: JSON.stringify(orderPayload)
+    });
+
+    out.textContent = `Tab: ${tabName}\nHTTP ${status}\n` + pretty(json);
+    await refreshProducts('productsList');
+    await refreshProducts('productsListAdmin');
+}
+
+const multiTabChannel = (() => {
+    try {
+        return 'BroadcastChannel' in window ? new BroadcastChannel('toko-online-app') : null;
+    } catch {
+        return null;
+    }
+})();
+
+function broadcastMultiTabCheckout(payload) {
+    const message = { type: 'checkout_all', payload };
+    if (multiTabChannel) {
+        try {
+            multiTabChannel.postMessage(message);
+        } catch {
+        }
+    }
+
+    try {
+        localStorage.setItem('multi_tab_payload', JSON.stringify(payload));
+        localStorage.setItem('multi_tab_trigger', String(Date.now()) + '-' + String(Math.random()));
+    } catch {
+    }
+}
+
+if (multiTabChannel) {
+    multiTabChannel.addEventListener('message', (event) => {
+        const data = event?.data;
+        if (!data || data.type !== 'checkout_all') {
+            if (data && data.type === 'register_tab' && data.payload) {
+                const p = data.payload;
+                if (p.id && p.name) {
+                    upsertPeer(p.id, p.name, Date.now());
+                    renderPeers();
+                }
+            }
+            return;
+        }
+        multiTabCheckout(data.payload);
+    });
+}
+
+window.addEventListener('storage', (event) => {
+    if (!event) {
+        return;
+    }
+    if (event.key !== 'multi_tab_trigger') {
+        if (event.key === 'multi_tab_register_trigger') {
+            try {
+                const raw = localStorage.getItem('multi_tab_register') || '';
+                const msg = raw ? JSON.parse(raw) : null;
+                if (msg && msg.type === 'register_tab' && msg.payload) {
+                    const p = msg.payload;
+                    if (p.id && p.name) {
+                        upsertPeer(p.id, p.name, Date.now());
+                        renderPeers();
+                    }
+                }
+            } catch {
+            }
+        } else if (event.key && event.key.indexOf(PEER_PREFIX) === 0) {
+            renderPeers();
+        }
+        return;
+    }
+    try {
+        const raw = localStorage.getItem('multi_tab_payload') || '';
+        const payload = raw ? JSON.parse(raw) : null;
+        multiTabCheckout(payload);
+    } catch {
+    }
+});
+
+document.getElementById('multiTabSetupForm')?.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const form = e.currentTarget;
+    const name = (form.customer_name?.value || '').trim();
+    const out = document.getElementById('multiTabResult');
+    if (!name) {
+        out.textContent = 'Nama tab wajib diisi.';
+        return;
+    }
+    saveTabCustomerName(name);
+    out.textContent = 'Nama tab tersimpan: ' + name;
+    announceTab();
+});
+
+document.getElementById('multiTabTriggerForm')?.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const form = e.currentTarget;
+    const productId = Number(form.product_id?.value);
+    const qty = Number(form.quantity?.value);
+    const out = document.getElementById('multiTabResult');
+
+    if (!productId || productId < 1) {
+        out.textContent = 'Product ID tidak valid.';
+        return;
+    }
+    if (!qty || qty < 1) {
+        out.textContent = 'Quantity tidak valid.';
+        return;
+    }
+
+    const payload = { product_id: productId, quantity: qty };
+    broadcastMultiTabCheckout(payload);
+    out.textContent = 'Trigger dikirim. Menjalankan checkout di tab ini dan mengirim trigger ke tab lain...';
+    await multiTabCheckout(payload);
+});
+
 try {
     const tab = localStorage.getItem('active_tab') || 'user';
     setTab(tab === 'admin' ? 'admin' : 'user');
@@ -232,8 +633,30 @@ try {
     if (adminKeyForm && adminKeyForm.admin_key) {
         adminKeyForm.admin_key.value = adminKey;
     }
+
+    const tabName = loadTabCustomerName();
+    const multiTabSetupForm = document.getElementById('multiTabSetupForm');
+    if (multiTabSetupForm && multiTabSetupForm.customer_name) {
+        multiTabSetupForm.customer_name.value = tabName;
+    }
 } catch {
 }
 
 refreshProducts('productsList');
 refreshProducts('productsListAdmin');
+updateFlashSaleUi();
+renderPeers();
+announceTab();
+setInterval(announceTab, 5000);
+
+window.addEventListener('beforeunload', () => {
+    const tabId = ensureUniqueTabId();
+    try {
+        localStorage.removeItem(PEER_PREFIX + tabId);
+    } catch {
+    }
+    try {
+        localStorage.removeItem(CLAIM_PREFIX + tabId);
+    } catch {
+    }
+});

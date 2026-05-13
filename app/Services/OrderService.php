@@ -30,10 +30,11 @@ final class OrderService
 
     /**
      * Membuat order dan mengurangi stok secara aman (tidak bisa minus) di dalam transaksi.
+     * Jika flash sale aktif, transaksi memakai locking (BEGIN IMMEDIATE) agar penulisan DB terkunci lebih awal.
      *
      * @return array{order: array, items: array<int, array>}
      */
-    public function createOrder(array $payload): array
+    public function createOrder(array $payload, bool $flashSale = false): array
     {
         $errors = $this->validateOrderPayload($payload);
         if ($errors !== []) {
@@ -43,7 +44,12 @@ final class OrderService
         $customerName = isset($payload['customer_name']) ? (string) $payload['customer_name'] : null;
         $items = $payload['items'];
 
-        $this->pdo->beginTransaction();
+        $txMode = $flashSale ? 'immediate' : 'pdo';
+        if ($txMode === 'immediate') {
+            $this->pdo->exec('BEGIN IMMEDIATE');
+        } else {
+            $this->pdo->beginTransaction();
+        }
         try {
             $orderId = $this->orderModel->create($customerName);
 
@@ -70,7 +76,11 @@ final class OrderService
             }
 
             $this->orderModel->updateTotal($orderId, $total);
-            $this->pdo->commit();
+            if ($txMode === 'immediate') {
+                $this->pdo->exec('COMMIT');
+            } else {
+                $this->pdo->commit();
+            }
 
             $order = $this->orderModel->findById($orderId);
             $orderItems = $this->orderItemModel->forOrder($orderId);
@@ -80,7 +90,12 @@ final class OrderService
                 'items' => $orderItems,
             ];
         } catch (\Throwable $e) {
-            if ($this->pdo->inTransaction()) {
+            if ($txMode === 'immediate') {
+                try {
+                    $this->pdo->exec('ROLLBACK');
+                } catch (\Throwable $ignored) {
+                }
+            } elseif ($this->pdo->inTransaction()) {
                 $this->pdo->rollBack();
             }
             throw $e;

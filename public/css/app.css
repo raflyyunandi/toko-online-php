@@ -96,6 +96,21 @@ input {
     white-space: nowrap;
 }
 
+.badge-row {
+    display: flex;
+    justify-content: flex-end;
+    margin-bottom: 10px;
+}
+
+.badge {
+    display: inline-block;
+    padding: 6px 10px;
+    border-radius: 999px;
+    font-size: 12px;
+    border: 1px solid rgba(255, 255, 255, 0.14);
+    background: rgba(255, 255, 255, 0.06);
+}
+
 button {
     margin-top: 12px;
     padding: 10px 12px;

@@ -22,7 +22,7 @@ $payload = [
 $context = stream_context_create([
     'http' => [
         'method' => 'POST',
-        'header' => "Content-Type: application/json\r\n",
+        'header' => "Content-Type: application/json\r\nX-Flash-Sale: 1\r\n",
         'content' => json_encode($payload),
         'ignore_errors' => true,
         'timeout' => 10,
@@ -45,4 +45,3 @@ fwrite(STDOUT, json_encode([
     'status' => $status,
     'body' => $body,
 ]));
-
