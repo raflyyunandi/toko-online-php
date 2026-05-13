@@ -41,37 +41,57 @@ Buka:
 
 - `GET /api/products`
 - `GET /api/products/{id}`
-- `POST /api/products`
+- `POST /api/products` (Admin-only, butuh `X-Admin-Key`)
+- `PATCH /api/products/{id}/stock` (Admin-only, butuh `X-Admin-Key`)
+- `GET /api/products/{id}/orders` (Admin-only, butuh `X-Admin-Key`)
 
 Contoh request:
 
 ```bash
-curl -X POST http://127.0.0.1:8000/api/products \
-  -H "Content-Type: application/json" \
+curl.exe -X POST http://127.0.0.1:8000/api/products ^
+  -H "Content-Type: application/json" ^
+  -H "X-Admin-Key: local-admin-key" ^
   -d "{\"name\":\"Flash Sale Item\",\"price\":10000,\"stock\":10}"
 ```
 
 ### Orders
 
 - `POST /api/orders`
+- `GET /api/orders` (User: filter `customer_name`, Admin: lihat semua + pagination)
 - `GET /api/orders/{id}`
 
 Contoh request:
 
 ```bash
-curl -X POST http://127.0.0.1:8000/api/orders \
-  -H "Content-Type: application/json" \
+curl.exe -X POST http://127.0.0.1:8000/api/orders ^
+  -H "Content-Type: application/json" ^
   -d "{\"customer_name\":\"andi\",\"items\":[{\"product_id\":1,\"quantity\":1}]}"
 ```
 
 Jika stok tidak cukup, API mengembalikan `409 Conflict` dengan code `out_of_stock`.
+
+## Flash Sale (Locking)
+
+Mode flash sale bisa diaktifkan untuk mensimulasikan lonjakan order bersamaan dengan metode locking di level database (SQLite). Saat aktif, proses checkout akan berjalan serial (antrian lock), sehingga menghindari masalah race condition.
+
+- Header: `X-Flash-Sale: 1`
+- Atau query: `?flash_sale=1`
+
+Contoh (aktifkan flash sale saat checkout):
+
+```bash
+curl.exe -X POST http://127.0.0.1:8000/api/orders ^
+  -H "Content-Type: application/json" ^
+  -H "X-Flash-Sale: 1" ^
+  -d "{\"customer_name\":\"andi\",\"items\":[{\"product_id\":1,\"quantity\":1}]}"
+```
 
 ## Functional Test (Race Condition)
 
 Test akan:
 
 1. Menjalankan built-in server PHP pada port lokal.
-2. Membuat produk stok 10.
+2. Membuat produk stok 10 (menggunakan `X-Admin-Key`).
 3. Menjalankan 20 proses order bersamaan.
 4. Memastikan hanya 10 yang sukses (201) dan 10 ditolak (409), serta stok akhir = 0.
 
@@ -123,7 +143,13 @@ curl.exe -H "X-Admin-Key: local-admin-key"
 Buka `http://127.0.0.1:8000/`:
 
 - Tab **User**: checkout dan cari order berdasarkan nama customer.
-- Tab **Admin**: isi Admin Key, buat produk, ubah stok, dan lihat semua order.
+- Tab **Admin**: isi Admin Key (default tersensor, bisa show/hide), buat produk, ubah stok, toggle Flash Sale ON/OFF, dan lihat semua order.
+
+Untuk demo race condition:
+
+- Buka 2-3 tab browser pada halaman yang sama.
+- Set "Nama tab ini" di masing-masing tab.
+- Jalankan checkout via section **Race Condition FlashSale** (trigger akan mengirim perintah checkout ke tab lain yang aktif).
 
 ### Contoh Request (Windows)
 
@@ -146,4 +172,10 @@ Cari order berdasarkan nama customer (User):
 
 ```bash
 curl.exe "http://127.0.0.1:8000/api/orders?customer_name=andi"
+```
+
+Audit siapa saja yang order produk tertentu (Admin):
+
+```bash
+curl.exe http://127.0.0.1:8000/api/products/2/orders -H "X-Admin-Key: local-admin-key"
 ```
