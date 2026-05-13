@@ -111,6 +111,50 @@ input {
     background: rgba(255, 255, 255, 0.06);
 }
 
+.tooltip {
+    display: inline-flex;
+    justify-content: center;
+    align-items: center;
+    width: 18px;
+    height: 18px;
+    margin-left: 8px;
+    border-radius: 999px;
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    background: rgba(255, 255, 255, 0.06);
+    font-size: 12px;
+    line-height: 1;
+    cursor: help;
+    user-select: none;
+    position: relative;
+}
+
+.tooltip::after {
+    content: attr(data-tooltip);
+    position: absolute;
+    right: 0;
+    top: calc(100% + 8px);
+    width: max-content;
+    max-width: 360px;
+    white-space: pre-line;
+    padding: 10px 12px;
+    border-radius: 10px;
+    border: 1px solid rgba(255, 255, 255, 0.16);
+    background: #0b1220;
+    color: #e6eefc;
+    box-shadow: 0 14px 36px rgba(0, 0, 0, 0.35);
+    opacity: 0;
+    transform: translateY(-4px);
+    pointer-events: none;
+    transition: opacity 120ms ease, transform 120ms ease;
+    z-index: 50;
+}
+
+.tooltip:hover::after,
+.tooltip:focus::after {
+    opacity: 1;
+    transform: translateY(0);
+}
+
 button {
     margin-top: 12px;
     padding: 10px 12px;

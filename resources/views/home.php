@@ -55,7 +55,7 @@
             </div>
 
             <div class="card">
-                <h2>Demo Multi-Tab Checkout</h2>
+                <h2>Race Condition FlashSale</h2>
                 <form id="multiTabSetupForm">
                     <label>Nama untuk tab ini</label>
                     <input name="customer_name" placeholder="Contoh: user-tab-1" required>
@@ -72,8 +72,18 @@
                     <button type="submit">Trigger Checkout (semua tab)</button>
                 </form>
 
-                <label>Tab yang terdaftar</label>
+                <label>
+                    Tab yang terdaftar
+                    <span class="tooltip" tabindex="0" data-tooltip="Masing-masing tab menyimpan nama user-nya sendiri (sessionStorage).&#10;Saat klik Trigger, tab ini akan broadcast sinyal ke tab lain agar melakukan checkout hampir bersamaan.&#10;Catatan: satu tab tidak bisa membaca nilai input tab lain secara langsung karena batasan keamanan browser.">?</span>
+                </label>
                 <pre id="multiTabPeers" class="result"></pre>
+
+                <label>
+                    Penjelasan Locking
+                    <span class="tooltip" tabindex="0" data-tooltip="Locking (Flash Sale ON) menggunakan BEGIN IMMEDIATE di SQLite.&#10;&#10;Apa artinya?&#10;- Write-lock diambil sejak awal transaksi.&#10;- Hanya 1 transaksi boleh menulis (stok/order) pada satu waktu.&#10;- Request lain menunggu sampai COMMIT/ROLLBACK (dibatasi busy_timeout).&#10;&#10;Siapa yang dapat giliran dulu?&#10;Bukan ditentukan oleh kode PHP, melainkan scheduler OS + SQLite: siapa yang paling cepat sampai ke BEGIN IMMEDIATE dan berhasil ambil lock. Dipengaruhi latency, urutan diterima server, jadwal CPU/OS, dan waktu eksekusi.&#10;&#10;Hasilnya: pemenang bisa terlihat acak antar user, tapi stok tetap aman dan tidak negatif.">?</span>
+                </label>
+                <pre id="lockingInfo" class="result">Flash Sale OFF: transaksi normal.
+Flash Sale ON: transaksi memakai locking (BEGIN IMMEDIATE) untuk mencegah race condition.</pre>
 
                 <pre id="multiTabResult" class="result"></pre>
             </div>

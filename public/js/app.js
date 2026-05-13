@@ -99,6 +99,13 @@ function updateFlashSaleUi() {
             ? 'Mode flash sale aktif. Order akan memakai locking di server.'
             : 'Mode flash sale nonaktif.';
     }
+
+    const lockingInfo = document.getElementById('lockingInfo');
+    if (lockingInfo) {
+        lockingInfo.textContent = active
+            ? 'Flash Sale ON: transaksi memakai locking (BEGIN IMMEDIATE) agar update stok berjalan bergiliran.'
+            : 'Flash Sale OFF: transaksi normal. Stok tetap aman karena update stok dilakukan secara atomik.';
+    }
 }
 
 function setTab(name) {
